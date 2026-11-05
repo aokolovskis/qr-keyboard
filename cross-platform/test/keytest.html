@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>QRKeyboard key test</title>
+<style>body{font:16px system-ui,sans-serif;margin:24px;max-width:900px}#s{font-size:22px}.ok{color:#0a7a2f}.bad{color:#b00020}pre{white-space:pre-wrap;background:#f3f3f3;padding:8px}</style>
+<h1>QRKeyboard key test</h1>
+<p>Click on this page, then scan a QR code (or run <code>run.bat --type "..."</code>).
+This page reads keys exactly like MembershipWorks' "Scan QR Code" mode does: one character per key press, Enter submits.
+Nothing is sent anywhere.</p>
+<div id="s">Waiting for keys…</div>
+<p>Keys received:</p><pre id="l"></pre>
+<script>
+let buf = '';
+addEventListener('keydown', e => {
+  l.textContent += JSON.stringify(e.key) + ' ';
+  if (e.key.length == 1) buf += e.key;
+  else if (e.keyCode == 13) {
+    const ok = /^https:\/\/membershipworks\.com\/a\/#ec\/[a-z0-9]{20,}$/.test(buf);
+    s.className = ok ? 'ok' : 'bad';
+    s.textContent = (ok ? '✔ MembershipWorks would accept: ' : '✘ Received (not a check-in code): ') + buf;
+    buf = '';
+  }
+});
+</script>
