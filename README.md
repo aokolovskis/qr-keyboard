@@ -19,7 +19,7 @@ Options (run the binary directly):
 
 ## MembershipWorks event check-in
 Everything can be set in the window: tick **MembershipWorks check-in only** (keep **Press Enter** on), or click
-**Setup…** for the steps plus an "Enable & Open Admin" button. Settings are remembered; CLI flags override them.
+**Setup…** for the steps plus an "Turn On & Open MembershipWorks" button (ticks the checkbox and opens the admin login in your browser; "OK" just closes the dialog). Settings are remembered; CLI flags override them.
 
 1. Log in at https://membershipworks.com/admin/, open the event, go to **Dashboard** and click **Scan QR Code**
    ("Awaiting Scan..." appears). Keep that Chrome window focused.

@@ -122,7 +122,7 @@ final class Scanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 }
 
 // MARK: - UI: small floating, non-activating preview panel
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let scanner = Scanner()
     var panel: NSPanel!
     let status = NSTextField(labelWithString: "Point a QR code at the camera…")
@@ -163,8 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirmation email, add the system Email question to each ticket, and enable \
         "Send confirmation email to all attendees".
         """
-        alert.addButton(withTitle: "Enable & Open Admin")
-        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Turn On & Open MembershipWorks")  // ticks the checkbox, opens admin in browser
+        alert.addButton(withTitle: "OK")                              // just closes this dialog
         if alert.runModal() == .alertFirstButtonReturn {
             mwCheckbox.state = .on
             toggleMW(mwCheckbox)
@@ -187,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
+        panel.delegate = self
 
         let content = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
         let preview = NSView(frame: NSRect(x: 0, y: 90, width: 320, height: 240))
@@ -238,7 +239,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+    // Quit only when the scanner panel itself is closed. AppKit doesn't count the panel as a
+    // regular window, so "terminate after last window closed" fired when the Setup dialog closed.
+    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { false }
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === panel { NSApp.terminate(nil) }
+    }
 }
 
 Settings.applyFlags()
