@@ -1,0 +1,12 @@
+[project]
+name = "qrkeyboard"
+version = "1.0.0"
+description = "Scan QR codes with the camera and type them as keyboard input"
+requires-python = "==3.12.*"
+dependencies = [
+    "opencv-python-headless==4.11.0.86",   # camera + QR decoding (wheels for Win/macOS/Linux)
+    "python-xlib==0.33; sys_platform == 'linux'",  # X11 key events (pure Python)
+]
+
+[tool.uv]
+package = false

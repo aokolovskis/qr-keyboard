@@ -4,7 +4,10 @@ Tiny macOS app: watches the camera, decodes QR codes, and **types the contents a
 into whatever app has focus, like a USB barcode scanner. No dependencies; it's a single Swift file
 that uses AVFoundation for detection and CGEvent for keystrokes.
 
-## Build & run
+**Windows / Linux / macOS:** see [`cross-platform/`](cross-platform/README.md) for a Python version with
+the same features. It runs from `run.bat` / `run.sh` and downloads everything it needs into its own folder.
+
+## Build & run (native macOS version)
     ./build.sh
     open build/QRKeyboard.app
 
