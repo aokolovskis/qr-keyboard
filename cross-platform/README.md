@@ -51,3 +51,13 @@ apps. Log in with an "X11"/"Xorg" session, or start the browser under XWayland
 3. Start QRKeyboard with **MembershipWorks check-in only** ticked, then show attendees' QR codes to the camera.
 
 See the parent folder's README for how MembershipWorks validates check-in codes.
+
+## Checking a new machine (e.g. Windows)
+1. `run.bat --decode test\sample-qr.png` (macOS/Linux: `./run.sh --decode test/sample-qr.png`)
+   tests setup and QR decoding. It should print `https://membershipworks.com/a/#ec/testtest…`.
+2. Open `test/keytest.html` in Chrome and click on the page. Then run
+   `run.bat --type "https://membershipworks.com/a/#ec/testtesttesttesttesttesttesttesttesttest"`
+   and click back into Chrome within 3 s. The page should turn green: "✔ MembershipWorks would accept".
+3. `run.bat` starts the camera window. Click into the test page and show `test/sample-qr.png`
+   (on a phone or printed) to the camera. It should turn green again.
+4. Only then try the real MembershipWorks "Scan QR Code" dialog. A real scan checks the attendee in.
