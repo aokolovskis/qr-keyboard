@@ -11,11 +11,27 @@ func flagValue(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
     return args[i + 1]
 }
-let sendEnter = !args.contains("--no-enter")                         // press Return after each code
 let cooldown = TimeInterval(flagValue("--cooldown") ?? "") ?? 3      // ignore the same code for N seconds
 let keyDelayMs = UInt32(flagValue("--key-delay") ?? "") ?? 8         // pause between keystrokes
-// --membershipworks: only type MembershipWorks event check-in codes; ignore any other QR code.
-let membershipWorksOnly = args.contains("--membershipworks")
+
+/// Settings shown in the window; remembered between launches. CLI flags override the saved value.
+enum Settings {
+    static let defaults = UserDefaults.standard
+    /// Only type MembershipWorks event check-in codes; ignore any other QR code. (--membershipworks)
+    static var membershipWorksOnly: Bool {
+        get { defaults.bool(forKey: "membershipWorksOnly") }
+        set { defaults.set(newValue, forKey: "membershipWorksOnly") }
+    }
+    /// Press Return after each code. (--no-enter turns it off)
+    static var sendEnter: Bool {
+        get { defaults.object(forKey: "sendEnter") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "sendEnter") }
+    }
+    static func applyFlags() {
+        if args.contains("--membershipworks") { membershipWorksOnly = true }
+        if args.contains("--no-enter") { sendEnter = false }
+    }
+}
 // --type TEXT: no camera; type TEXT into the focused app after 3 s, then quit (for testing).
 let typeOnce = flagValue("--type")
 
@@ -26,7 +42,7 @@ let mwCheckIn = try! NSRegularExpression(pattern: "^https://membershipworks\\.co
 func textToType(for code: String) -> String? {
     let text = code.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return nil }
-    if membershipWorksOnly {
+    if Settings.membershipWorksOnly {
         let range = NSRange(text.startIndex..., in: text)
         guard mwCheckIn.firstMatch(in: text, range: range) != nil else { return nil }
     }
@@ -49,7 +65,7 @@ enum Keyboard {
             }
             usleep(keyDelayMs * 1000)
         }
-        if sendEnter { press(key: 0x24) } // kVK_Return -> keyCode 13
+        if Settings.sendEnter { press(key: 0x24) } // kVK_Return -> keyCode 13
     }
 
     static func press(key: CGKeyCode) {
@@ -110,6 +126,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let scanner = Scanner()
     var panel: NSPanel!
     let status = NSTextField(labelWithString: "Point a QR code at the camera…")
+    lazy var mwCheckbox = NSButton(checkboxWithTitle: "MembershipWorks check-in only",
+                                   target: self, action: #selector(toggleMW(_:)))
+    lazy var enterCheckbox = NSButton(checkboxWithTitle: "Press Enter",
+                                      target: self, action: #selector(toggleEnter(_:)))
+    lazy var setupButton = NSButton(title: "Setup…", target: self, action: #selector(showSetup))
+
+    @objc func toggleMW(_ sender: NSButton) {
+        Settings.membershipWorksOnly = sender.state == .on
+        if Settings.membershipWorksOnly { Settings.sendEnter = true; enterCheckbox.state = .on } // MW needs Enter
+        status.stringValue = readyMessage()
+    }
+    @objc func toggleEnter(_ sender: NSButton) { Settings.sendEnter = sender.state == .on }
+
+    func readyMessage() -> String {
+        Settings.membershipWorksOnly ? "MembershipWorks: keep \"Awaiting Scan…\" in front"
+                                     : "Point a QR code at the camera…"
+    }
+
+    @objc func showSetup() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "MembershipWorks event check-in"
+        alert.informativeText = """
+        1. Log in to the MembershipWorks admin and open your event.
+        2. Go to the event's Dashboard and click "Scan QR Code". \
+        "Awaiting Scan…" appears.
+        3. Keep that browser window in front. Don't click into other apps while scanning.
+        4. Hold each attendee's QR code (from their confirmation email) up to the camera. \
+        Each scan checks the attendee in; keep scanning without closing the dialog.
+
+        "MembershipWorks check-in only" types only check-in codes, so other QR codes \
+        can't interfere. "Press Enter" must stay on; it submits each code.
+
+        One-time event setup (Event → Advanced / Ticketing): add the [qec] tag to the \
+        confirmation email, add the system Email question to each ticket, and enable \
+        "Send confirmation email to all attendees".
+        """
+        alert.addButton(withTitle: "Enable & Open Admin")
+        alert.addButton(withTitle: "Close")
+        if alert.runModal() == .alertFirstButtonReturn {
+            mwCheckbox.state = .on
+            toggleMW(mwCheckbox)
+            NSWorkspace.shared.open(URL(string: "https://membershipworks.com/admin/")!)
+        }
+    }
 
     func applicationDidFinishLaunching(_ note: Notification) {
         // Ask for Accessibility permission (needed to synthesize key presses).
@@ -119,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Non-activating panel so keystrokes go to the app you were using, not to us.
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 270),
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 330),
                         styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow],
                         backing: .buffered, defer: false)
         panel.title = "QR → Keyboard"
@@ -128,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.becomesKeyOnlyIfNeeded = true
 
         let content = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
-        let preview = NSView(frame: NSRect(x: 0, y: 30, width: 320, height: 240))
+        let preview = NSView(frame: NSRect(x: 0, y: 90, width: 320, height: 240))
         preview.wantsLayer = true
         let layer = AVCaptureVideoPreviewLayer(session: scanner.session)
         layer.videoGravity = .resizeAspectFill
@@ -136,8 +197,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preview.layer = layer
         status.frame = NSRect(x: 8, y: 6, width: 304, height: 18)
         status.lineBreakMode = .byTruncatingTail
-        content.addSubview(preview)
-        content.addSubview(status)
+        mwCheckbox.state = Settings.membershipWorksOnly ? .on : .off
+        enterCheckbox.state = Settings.sendEnter ? .on : .off
+        mwCheckbox.frame = NSRect(x: 8, y: 60, width: 230, height: 22)
+        enterCheckbox.frame = NSRect(x: 8, y: 34, width: 120, height: 22)
+        setupButton.bezelStyle = .rounded
+        setupButton.frame = NSRect(x: 232, y: 30, width: 82, height: 28)
+        if AXIsProcessTrusted() { status.stringValue = readyMessage() }
+        for v in [preview, mwCheckbox, enterCheckbox, setupButton, status] { content.addSubview(v) }
         panel.contentView = content
         panel.setFrameTopLeftPoint(NSPoint(x: 40, y: (NSScreen.main?.visibleFrame.maxY ?? 800) - 40))
         panel.orderFrontRegardless()
@@ -173,6 +240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 }
+
+Settings.applyFlags()
 
 if let text = typeOnce {
     guard AXIsProcessTrusted() else {

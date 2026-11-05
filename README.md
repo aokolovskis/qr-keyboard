@@ -18,9 +18,13 @@ Options (run the binary directly):
 - `--type TEXT`: no camera; type TEXT into the focused window after 3 s and quit (for testing)
 
 ## MembershipWorks event check-in
+Everything can be set in the window: tick **MembershipWorks check-in only** (keep **Press Enter** on), or click
+**Setup…** for the steps plus an "Enable & Open Admin" button. Settings are remembered; CLI flags override them.
+
 1. Log in at https://membershipworks.com/admin/, open the event, go to **Dashboard** and click **Scan QR Code**
    ("Awaiting Scan..." appears). Keep that Chrome window focused.
-2. Start the scanner: `build/QRKeyboard.app/Contents/MacOS/QRKeyboard --membershipworks`
+2. Start the scanner: `open build/QRKeyboard.app` with the checkbox ticked
+   (or `build/QRKeyboard.app/Contents/MacOS/QRKeyboard --membershipworks`)
 3. Show attendees' confirmation-email QR codes to the camera. Each one is checked in and its details are shown;
    just keep scanning, there's no need to close the dialog.
 
