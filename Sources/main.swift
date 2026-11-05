@@ -5,33 +5,51 @@ import AVFoundation
 import ApplicationServices
 import Vision
 
-// MARK: - Config (via env vars or CLI flags)
+// MARK: - Config (CLI flags)
 let args = CommandLine.arguments
-let sendEnter = !args.contains("--no-enter")          // press Return after each code
-let cooldown: TimeInterval = {                       // ignore the same code for N seconds
-    if let i = args.firstIndex(of: "--cooldown"), i + 1 < args.count, let v = Double(args[i + 1]) { return v }
-    return 3
-}()
+func flagValue(_ name: String) -> String? {
+    guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
+    return args[i + 1]
+}
+let sendEnter = !args.contains("--no-enter")                         // press Return after each code
+let cooldown = TimeInterval(flagValue("--cooldown") ?? "") ?? 3      // ignore the same code for N seconds
+let keyDelayMs = UInt32(flagValue("--key-delay") ?? "") ?? 8         // pause between keystrokes
+// --membershipworks: only type MembershipWorks event check-in codes; ignore any other QR code.
+let membershipWorksOnly = args.contains("--membershipworks")
+// --type TEXT: no camera; type TEXT into the focused app after 3 s, then quit (for testing).
+let typeOnce = flagValue("--type")
+
+/// MembershipWorks' "Scan QR Code" mode accepts exactly this shape (see README).
+let mwCheckIn = try! NSRegularExpression(pattern: "^https://membershipworks\\.com/a/#ec/[a-z0-9]{20,}$")
+
+/// Returns the text to type for a scanned code, or nil if it should be ignored.
+func textToType(for code: String) -> String? {
+    let text = code.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return nil }
+    if membershipWorksOnly {
+        let range = NSRange(text.startIndex..., in: text)
+        guard mwCheckIn.firstMatch(in: text, range: range) != nil else { return nil }
+    }
+    return text
+}
 
 // MARK: - Keyboard output
 enum Keyboard {
     static let source = CGEventSource(stateID: .hidSystemState)
 
+    /// Types one key event per character, like a hardware scanner. Web pages that read
+    /// `KeyboardEvent.key` (e.g. MembershipWorks scan mode) ignore multi-character events.
     static func type(_ text: String) {
-        // CGEvent accepts up to ~20 UTF-16 units per event, so send in chunks.
-        let units = Array(text.utf16)
-        var i = 0
-        while i < units.count {
-            let chunk = Array(units[i..<min(i + 20, units.count)])
+        for ch in text {
+            let units = Array(String(ch).utf16)
             for down in [true, false] {
                 guard let ev = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { continue }
-                ev.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
+                ev.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
                 ev.post(tap: .cghidEventTap)
             }
-            usleep(2000)
-            i += 20
+            usleep(keyDelayMs * 1000)
         }
-        if sendEnter { press(key: 0x24) } // kVK_Return
+        if sendEnter { press(key: 0x24) } // kVK_Return -> keyCode 13
     }
 
     static func press(key: CGKeyCode) {
@@ -126,6 +144,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         scanner.onCode = { [weak self] code in
             print(code); fflush(stdout)
+            guard let text = textToType(for: code) else {
+                self?.status.stringValue = "Ignored (not a check-in code)"
+                NSSound(named: "Funk")?.play()
+                return
+            }
             guard AXIsProcessTrusted() else {
                 // macOS silently drops synthetic keystrokes without Accessibility permission.
                 self?.status.stringValue = "NOT typed: no Accessibility permission"
@@ -135,8 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSSound(named: "Basso")?.play()
                 return
             }
-            self?.status.stringValue = "Typed: \(code)"
-            Keyboard.type(code)
+            self?.status.stringValue = "Typed: \(text)"
+            Keyboard.type(text)
             NSSound(named: "Tink")?.play()
         }
 
@@ -149,6 +172,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+}
+
+if let text = typeOnce {
+    guard AXIsProcessTrusted() else {
+        FileHandle.standardError.write(Data("No Accessibility permission; cannot type.\n".utf8)); exit(1)
+    }
+    print("Typing in 3 s — focus the target window…"); fflush(stdout)
+    sleep(3)
+    Keyboard.type(text)
+    exit(0)
 }
 
 let app = NSApplication.shared
